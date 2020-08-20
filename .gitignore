@@ -1,5 +1,7 @@
 # Data files
 d2l.ai/data/
+d2l.ai/**/data/
+
 
 # IDE related files
 .vscode/

@@ -26,9 +26,9 @@ def affine_forward(x, w, b):
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
     # First reshape the input into a (N, D) matrix
-    N = x.shape()[0]
+    N = x.shape[0]
     D = 1
-    for dim in x.shape()[1:]:
+    for dim in x.shape[1:]:
         D *= dim
     
     new_x = np.reshape(x, (N, D))
@@ -64,6 +64,22 @@ def affine_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    N = x.shape[0]
+    D = 1
+    for dim in x.shape[1:]:
+        D *= dim
+
+    # db is easiest: sum dout over its rows
+    db = np.sum(dout, 0)
+    db = db.reshape((b.shape))
+    
+    # for dw we first reshape x into (N, D) then do X'dout
+    new_x = np.reshape(x, (N, D))
+    dw = np.dot(new_x.T, dout)
+    
+    # for dx we do dout*w' and then reshape D to d1, ..., dk
+    dx = np.dot(dout, w.T)
+    dx = np.reshape(dx, x.shape)
     
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -89,8 +105,8 @@ def relu_forward(x):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
-
+    out = np.maximum(x, np.zeros(x.shape))
+    
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -115,7 +131,7 @@ def relu_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    dx = np.where(cache > 0, dout, np.zeros(cache.shape))
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -144,7 +160,12 @@ def softmax_loss(x, y):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    exps = np.exp(x - np.max(X))
+    exp_sums = np.sum(exps, 1)
+    probs = exps / exp_sums
+    
+    
+    
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################

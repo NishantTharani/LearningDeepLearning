@@ -2,6 +2,8 @@
 d2l.ai/data/
 d2l.ai/**/data/
 
+.DS_STORE
+
 
 # IDE related files
 .vscode/

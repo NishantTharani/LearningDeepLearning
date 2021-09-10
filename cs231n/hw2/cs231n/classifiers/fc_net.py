@@ -73,8 +73,24 @@ class FullyConnectedNet(object):
         # parameters should be initialized to zeros.                               #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-        pass
+        
+        prev_dim = input_dim
+        rng = np.random.default_rng()
+        
+        for layer_idx, new_dim in enumerate(hidden_dims):
+            # Weights are prev_dim x new_dim; biases are prev_dim x 1
+            weights = rng.normal(0, weight_scale, (prev_dim, new_dim))
+            bias = np.zeros((prev_dim, ))
+            self.params[f"W{layer_idx+1}"] = weights
+            self.params[f"b{layer_idx+1}"] = bias
+            prev_dim = new_dim
+        
+        weights = rng.normal(0, weight_scale, (prev_dim, num_classes))
+        bias = np.zeros((prev_dim, ))
+        self.params[f"W{self.num_layers}"] = weights
+        self.params[f"b{self.num_layers}"] = bias
+        
+            
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

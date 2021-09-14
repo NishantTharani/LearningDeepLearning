@@ -199,8 +199,16 @@ def softmax_loss(x, y):
     # cs231n/classifiers/softmax.py.                                          #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    
+    N = y.shape[0]
+    exps = np.exp(x - np.max(x))
+    exp_sums = np.reshape(np.sum(exps, 1), (exps.shape[0], 1))
+    probs = exps / exp_sums
+    loss = np.sum(-np.log(probs[range(N),y])) / N
+    
+    probs[range(N),y] -= 1
+    dx = probs/N
 
-    pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################

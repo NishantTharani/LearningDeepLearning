@@ -160,11 +160,14 @@ def softmax_loss(x, y):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    exps = np.exp(x - np.max(X))
-    exp_sums = np.sum(exps, 1)
+    N = y.shape[0]
+    exps = np.exp(x - np.max(x))
+    exp_sums = np.reshape(np.sum(exps, 1), (exps.shape[0], 1))
     probs = exps / exp_sums
+    loss = np.sum(-np.log(probs[range(N),y])) / N
     
-    
+    probs[range(N),y] -= 1
+    dx = probs/N
     
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -244,7 +247,19 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        mean = np.mean(x, 0)
+        var = np.var(x, 0)
+        out_raw = (x - mean) / np.sqrt(var + eps)
+        out = (out_raw * gamma) + beta
+        
+        running_mean = (momentum * running_mean) + ((1 - momentum) * mean)
+        running_var = (momentum * running_var) + ((1 - momentum) * var)
+        bn_param['running_mean'] = running_mean
+        bn_param['running_var'] = running_var
+        
+        cache = (x, gamma, beta, mean, var, out_raw, eps)
+        
+        
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         #######################################################################
@@ -259,8 +274,9 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
-
+        out = (x - running_mean) / np.sqrt(running_var + eps)
+        out = (out * gamma) + beta
+        
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         #######################################################################
         #                          END OF YOUR CODE                           #
@@ -300,7 +316,33 @@ def batchnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    x, gamma, beta, mean, var, out_raw, eps = cache
+    N, D = x.shape
+    o1 = mean
+    o2 = x - mean
+    o3 = np.square(o2)
+    o4 = np.mean(o3, 0)
+    o5 = np.sqrt(o4 + eps)
+    o6 = 1/o5
+    o7 = o2 * o6
+    
+    dbeta = np.sum(dout, 0)
+    dgamma = np.sum(out_raw * dout, 0)
+    
+    do7 = dout * gamma  # (N, D)
+    do6 = np.sum(do7 * o2, 0)  # (D,)
+    do2 = do7 * o6  # (N, D)
+    do5 = (-1) * np.power(o5, -2) * do6
+    do4 = (0.5) * do5 * np.power(o4 + eps, -0.5)
+    do3 = do4 * (1/N) * np.ones((N,D))
+    do2pr = do3 * 2 * o2
+    do1 = (-1) * np.sum(do2 + do2pr, 0)
+    do0 = do2 + do2pr
+    do0pr = do1 * (1/N) * np.ones((N,D))
+    dx = do0 + do0pr
+    
+    
+    
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -334,7 +376,28 @@ def batchnorm_backward_alt(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    x, gamma, beta, mean, var, out_raw, eps = cache
+    N, D = x.shape
+    
+    mu = mean
+    
+    sigma = np.sqrt(var + eps)
+    t1 = 1/sigma
+    t2 = (1/N) * (-1 / sigma)
+    
+    t3_in1 = (2/N) * (x - mean)
+    t3_in2 = (1/N) * (-2 / N) * np.sum(x - mean, 0)
+    t3_in = t3_in1 + t3_in2
+    t3_out = (x - mean) * (-1) * np.power(sigma, -2) * (0.5) * np.power(var + eps, -0.5)
+    t3 = t3_out * t3_in
+    
+    dx_raw = t1 + t2 + t3
+    dx = (gamma * dx_raw) * dout
+    
+    
+    dbeta = np.sum(dout, 0)
+    dgamma = np.sum(out_raw * dout, 0)
+    
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -378,8 +441,16 @@ def layernorm_forward(x, gamma, beta, ln_param):
     # the batch norm code and leave it almost unchanged?                      #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    
+    x = x.T
+    mean = np.mean(x, 0)
+    var = np.var(x, 0)
+    out_raw = (x - mean) / np.sqrt(var + eps)
+    out_raw = out_raw.T
+    out = (out_raw * gamma) + beta
+    out = out
 
-    pass
+    cache = (x, gamma, beta, mean, var, out_raw, eps)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -413,7 +484,38 @@ def layernorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    x, gamma, beta, mean, var, out_raw, eps = cache
+    
+    dbeta = np.sum(dout, 0)
+    dgamma = np.sum(out_raw * dout, 0)
+    
+    N, D = x.shape
+    
+    o1 = mean
+    o2 = x - mean
+    o3 = np.square(o2)
+    o4 = np.mean(o3, 0)
+    o5 = np.sqrt(o4 + eps)
+    o6 = 1/o5
+    o7 = o2 * o6
+    
+    
+    
+    do7 = dout * gamma
+    do7 = do7.T
+    do6 = np.sum(do7 * o2, 0)
+    do2 = do7 * o6
+    do5 = (-1) * np.power(o5, -2) * do6
+    do4 = (0.5) * do5 * np.power(o4 + eps, -0.5)
+    do3 = do4 * (1/N) * np.ones((N,D))
+    do2pr = do3 * 2 * o2
+    do1 = (-1) * np.sum(do2 + do2pr, 0)
+    do0 = do2 + do2pr
+    do0pr = do1 * (1/N) * np.ones((N,D))
+    dx = do0 + do0pr
+    dx = dx.T
+    
+
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -459,7 +561,9 @@ def dropout_forward(x, dropout_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        mask = np.random.choice([True, False], size=x.shape, p=(p, 1-p))
+        out = x * mask
+        out /= p
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         #######################################################################
@@ -471,7 +575,7 @@ def dropout_forward(x, dropout_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        return x, (dropout_param, mask)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         #######################################################################
@@ -501,7 +605,8 @@ def dropout_backward(dout, cache):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        dx = dout * mask
+        dx /= dropout_param["p"]
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         #######################################################################
@@ -544,8 +649,39 @@ def conv_forward_naive(x, w, b, conv_param):
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
+    pad = conv_param["pad"]
+    stride = conv_param["stride"]
+    F, C, HH, WW = w.shape
+    outs = []  # F elements will have shape (N, H', W')
+    
+    x_padded = np.pad(x, ((0,0), (0,0), (pad,pad), (pad,pad)))
+    N, C, H, W = x_padded.shape
+    
+    for f in range(F):
+        weights = w[f]  # shape (C, HH, WW)
+        bias = b[f]  # int
+        images = []  # N elements will have shape (H', W')
+        
+        for i in range(N):
+            image = x_padded[i]  # shape (C, H, W)
+            rows = []  # H' elements will have shape (W')
+            row, col = 0, 0
+            while row + HH <= H:
+                cols = []  # W' ints
+                while col + WW <= W:
+                    cols.append(np.sum(image[:, row:row+HH, col:col+WW] * weights) + bias)
+                    col += stride
+                row += stride
+                col = 0
+                rows.append(cols)
+            images.append(rows)
+        
+        outs.append(images)
+    
+    out = np.array(outs)
+    out = np.swapaxes(out, 0, 1)
+    
+    
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################

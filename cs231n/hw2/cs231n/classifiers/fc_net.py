@@ -78,15 +78,19 @@ class FullyConnectedNet(object):
         rng = np.random.default_rng()
         
         for layer_idx, new_dim in enumerate(hidden_dims):
-            # Weights are prev_dim x new_dim; biases are prev_dim x 1
+            # Weights are prev_dim x new_dim; biases are new_dim x 1
             weights = rng.normal(0, weight_scale, (prev_dim, new_dim))
-            bias = np.zeros((prev_dim, ))
+            bias = np.zeros((new_dim, ))
             self.params[f"W{layer_idx+1}"] = weights
             self.params[f"b{layer_idx+1}"] = bias
+            if self.normalization in ["batchnorm", "layernorm"]:
+                self.params[f"gamma{layer_idx+1}"] = np.ones(shape=(new_dim, ))
+                self.params[f"beta{layer_idx+1}"] = np.zeros(shape=(new_dim, ))
             prev_dim = new_dim
         
+        # Final layer
         weights = rng.normal(0, weight_scale, (prev_dim, num_classes))
-        bias = np.zeros((prev_dim, ))
+        bias = np.zeros((num_classes, ))
         self.params[f"W{self.num_layers}"] = weights
         self.params[f"b{self.num_layers}"] = bias
         
@@ -149,6 +153,7 @@ class FullyConnectedNet(object):
         if self.normalization == "batchnorm":
             for bn_param in self.bn_params:
                 bn_param["mode"] = mode
+        
         scores = None
         ############################################################################
         # TODO: Implement the forward pass for the fully connected net, computing  #
@@ -164,7 +169,46 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        caches = []
+        out = X
+        
+        for layer_idx in range(1, self.num_layers):
+            w = self.params[f"W{layer_idx}"]
+            b = self.params[f"b{layer_idx}"]
+            out, cache = affine_forward(out, w, b)
+            caches.append(cache)
+            
+            
+            # I thought ReLU before batch norm would be better?
+            if self.normalization == "batchnorm":
+                beta = self.params[f"beta{layer_idx}"]
+                gamma = self.params[f"gamma{layer_idx}"]
+                out, cache = batchnorm_forward(out, gamma, beta, self.bn_params[layer_idx - 1])
+                caches.append(cache)
+            elif self.normalization == "layernorm":
+                beta = self.params[f"beta{layer_idx}"]
+                gamma = self.params[f"gamma{layer_idx}"]
+                out, cache = layernorm_forward(out, gamma, beta, self.bn_params[layer_idx - 1])
+                caches.append(cache)
+            
+            # ReLU
+            out, cache = relu_forward(out)
+            caches.append(cache)
+            
+            # Dropout before batch norm would be better, no?
+            if self.use_dropout:
+                out, cache = dropout_forward(out, self.dropout_param)
+                caches.append(cache)
+            
+            
+        
+        # Final layer
+        w = self.params[f"W{self.num_layers}"]
+        b = self.params[f"b{self.num_layers}"]
+        out, cache = affine_forward(out, w, b)
+        caches.append(cache)
+        
+        scores = out
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -191,7 +235,65 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        loss, dx = softmax_loss(scores, y)
+        
+        # L2 Regularization
+        l2 = 0
+        for k, v in self.params.items():
+            if 'gamma' not in k and 'beta' not in k:
+                l2 += np.sum(0.5 * self.reg * np.square(v))
+        loss += l2
+            
+        
+        # Final layer first
+        cache = caches.pop()
+        dx, dw, db = affine_backward(dx, cache)
+        dw += self.reg * self.params[f"W{self.num_layers}"]
+        db += self.reg * self.params[f"b{self.num_layers}"]
+        grads[f"W{self.num_layers}"] = dw
+        grads[f"b{self.num_layers}"] = db
+        
+        
+        for layer_idx in range(self.num_layers - 1, 0, -1):
+            
+            if self.use_dropout:
+                cache = caches.pop()
+                dx = dropout_backward(dx, cache)
+            
+            # ReLU
+            cache = caches.pop()
+            dx = relu_backward(dx, cache)
+            
+            if self.normalization == "batchnorm":
+                gammalab = f"gamma{layer_idx}"
+                betalab = f"beta{layer_idx}"
+                cache = caches.pop()
+                dx, dgamma, dbeta = batchnorm_backward(dx, cache)
+                grads[gammalab] = dgamma
+                grads[betalab] = dbeta
+            elif self.normalization == "layernorm":
+                gammalab = f"gamma{layer_idx}"
+                betalab = f"beta{layer_idx}"
+                cache = caches.pop()
+                dx, dgamma, dbeta = layernorm_backward(dx, cache)
+                grads[gammalab] = dgamma
+                grads[betalab] = dbeta
+            
+            # FC layer
+            wlab = f"W{layer_idx}"
+            blab = f"b{layer_idx}"
+            
+            cache = caches.pop()
+            dx, dw, db = affine_backward(dx, cache)
+            
+            # Add grad of L2 regularization
+            dw += self.reg * self.params[wlab]
+            db += self.reg * self.params[blab]
+            
+            grads[wlab] = dw
+            grads[blab] = db
+            
+        
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

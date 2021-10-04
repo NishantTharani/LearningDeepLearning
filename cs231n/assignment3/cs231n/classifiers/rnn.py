@@ -147,8 +147,38 @@ class CaptioningRNN:
         # in your implementation, if needed.                                       #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-        pass
+        
+        # forward pass
+        # things to note:
+        # - we generate the next word of the caption using the ground truth of previous word, not what we predicted it to be?
+        # - the weights that turn a word into embedding are independent of the weights that turn a hidden state back into a word
+        
+        if self.cell_type == "rnn":
+            out_hidden, cache_hidden = affine_forward(features, W_proj, b_proj)  # (N,D) * (D, H) -> (N, H)
+            out_embedded, cache_embedded = word_embedding_forward(captions_in, W_embed)  # (N, T, W)
+            out_rnn, cache_rnn = rnn_forward(out_embedded, out_hidden, Wx, Wh, b)  # -> (N, T, H)
+            out_temporal, cache_temporal = temporal_affine_forward(out_rnn, W_vocab, b_vocab)  # -> (N, T, V)
+            loss, dout_temporal = temporal_softmax_loss(out_temporal, captions_out, mask)
+        
+        
+        # backward pass
+        dout_rnn, dw, db = temporal_affine_backward(dout_temporal, cache_temporal)
+        grads["W_vocab"] = dw
+        grads["b_vocab"] = db
+        
+        dout_embedded, dout_hidden, dWx, dWh, db = rnn_backward(dout_rnn, cache_rnn)
+        grads["Wx"] = dWx
+        grads["Wh"] = dWh
+        grads["b"] = db
+        
+        dW_embed = word_embedding_backward(dout_embedded, cache_embedded)
+        grads["W_embed"] = dW_embed
+        
+        dfeatures, dW_proj, db_proj = affine_backward(dout_hidden, cache_hidden)
+        grads["W_proj"] = dW_proj
+        grads["b_proj"] = db_proj
+            
+        
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -215,8 +245,41 @@ class CaptioningRNN:
         # you are using an LSTM, initialize the first cell state to zeros.        #
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        
+        words = np.array([self._start] * N)
+        hidden_state, _ = affine_forward(features, W_proj, b_proj)  # (N,D) * (D, H) -> (N, H)
+        
+        for t in range(0, max_length):
+            embeddings, _ = word_embedding_forward(words, W_embed)  # -> (N, D)
+            hidden_state, _ = rnn_step_forward(embeddings, hidden_state, Wx, Wh, b)
+            
+            scores, _ = temporal_affine_forward(hidden_state[:, np.newaxis, :], W_vocab, b_vocab)
+            scores = np.reshape(scores, (scores.shape[0], scores.shape[2]))
+            
+            words = np.argmax(scores, 1)
+            captions[:, t] = words
+            
 
-        pass
+            
+        """
+        for n in range(N):
+            word = self._start
+            t = 0
+            hidden_state, _ = affine_forward(features, W_proj, b_proj)  # (N,D) * (D, H) -> (N, H)
+            while word != self._end and t < max_length:
+                embedding = W_embed[word]  # -> [D,]
+                hidden_state, _ = rnn_step_forward(embedding, hidden_state, Wx, Wh, b)
+                print(embedding.shape)
+                
+                # get scores and sample the word with highest score
+                scores, _ = temporal_affine_forward(hidden_state, W_vocab, b_vocab)
+                print(scores.shape)
+                print(len(self.idx_to_word))
+                max_idx = np.argmax(scores)
+                word = self.idx_to_word[max_idx]
+                captions[n, t] = word
+        """
+            
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

@@ -126,7 +126,9 @@ class MultiHeadAttention(nn.Module):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        self.dropout = dropout
+        self.num_heads = num_heads
+        
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -173,8 +175,84 @@ class MultiHeadAttention(nn.Module):
         #     function masked_fill may come in handy.                              #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        
+        H = self.num_heads
+        E = D
+        
+        # Compute the transformations of the inputs
+        key_out = self.key(key)
+        value_out = self.value(value)
+        query_out = self.query(query)
+        
+        # Reshape the transformations
+        key_split = torch.reshape(key_out, shape=(N, T, H, E//H))
+        value_split = torch.reshape(value_out, shape=(N, T, H, E//H))
+        query_split = torch.reshape(query_out, shape=(N, S, H, E//H))
+        
+        # Swap axes to prepare matrices for matmul
+        query_swapped = torch.swapaxes(query_split, 1, 2)  # -> (N, H, S, E//H)
+        key_swapped = torch.swapaxes(key_split, 1, 2)  # -> (N, H, T, E//H)
+        key_swapped = torch.swapaxes(key_swapped, 2, 3)  # -> (N, H, E//H, T)
+        
+        # Obtain the alignment scores
+        alignment_scores = torch.matmul(query_swapped, key_swapped)  # -> (N, H, S, T)
+        
+        # Swap axes so that masking will work
+        alignment_swapped = torch.swapaxes(alignment_scores, 2, 3)  # -> (N, H, T, S)
 
-        pass
+        # Apply mask to alignment scores
+        if attn_mask is not None:
+            bool_mask = torch.tensor(attn_mask == 0)
+        else:
+            bool_mask = torch.full((T, S), False)
+
+        alignment_swapped = alignment_swapped.masked_fill(bool_mask, float('-inf'))
+        
+        # Scale and get softmax scores
+        scaling_term = math.sqrt(E // H)
+        alignment_scaled = alignment_swapped / scaling_term
+
+        attn_scores = F.softmax(alignment_scaled, dim=2)  # -> (N, H, T, S) 
+                
+        # attn_scores are (N, H, T, S)
+        # values are (N, T, H, E//H)
+        attn_scores = torch.unsqueeze(attn_scores, dim=2)  # -> (N, H, 1, T, S)
+        attn_scores = attn_scores.repeat(1, 1, E//H, 1, 1)  # -> (N, H, E//H, T, S)
+        value_swapped = torch.swapaxes(value_split, 1, 2)  # -> (N, H, T, E//H)
+        value_swapped = torch.swapaxes(value_swapped, 2, 3)  # -> (N, H, E//H, T)
+        value_swapped = torch.unsqueeze(value_swapped, dim=4)  # -> (N, H, E//H, T, 1)
+        value_swapped = value_swapped.repeat(1, 1, 1, 1, S)  # -> (N, H, E//H, T, S)
+        
+        outputs = attn_scores * value_swapped  # -> (N, H, E//H, T, S)
+        outputs = torch.sum(outputs, dim=3)  # -> (N, H, E//H, S)
+        outputs = torch.swapaxes(outputs, 2, 3)  # -> (N, H, S, E//H)
+        
+        # Apply dropout
+        outputs = F.dropout(outputs, p=self.dropout)
+        
+        # Concatenate the outputs and project to the final output
+        outputs_swapped = torch.swapaxes(outputs, 1, 2)  # -> (N, S, H, E//H)
+        outputs_squished = torch.reshape(outputs_swapped, shape=(N, S, E))
+        output = self.proj(outputs_squished)
+        
+        """
+        # Get softmax scores
+        attn_scores = F.softmax(alignment_swapped, dim=2)  # -> (N, H, T, S) 
+                
+        # Swap axes to prepare for matmul
+        attn_swapped = torch.swapaxes(attn_scores, 2, 3)  # -> (N, H, S, T)
+        value_swapped = torch.swapaxes(value_split, 1, 2)  # -> (N, H, T, E//H)
+        outputs = torch.matmul(attn_swapped, value_swapped)  # -> (N, H, S, E//H)
+        
+        # Apply dropout
+        outputs = F.dropout(outputs, p=self.dropout)
+        
+        # Concatenate the outputs and project to the final output
+        outputs_swapped = torch.swapaxes(outputs, 1, 2)  # -> (N, S, H, E//H)
+        outputs_squished = torch.reshape(outputs_swapped, shape=(N, S, E))
+        output = self.proj(outputs_squished)
+        """
+        
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
